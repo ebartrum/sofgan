@@ -403,6 +403,8 @@ num_objs = 3
 look_at = np.asarray([0, 0.1, 0.0])
 cam_center =  np.asarray([0, 0.1, 4.5])
 
+nocs_max = 2.5
+
 # generate images
 with torch.no_grad():
     for obj_id in range(num_objs):
@@ -439,3 +441,12 @@ with torch.no_grad():
             filename = f"{i}.png"
             full_path = os.path.join(save_dir, filename)
             out.save(full_path)
+
+            nocs_map_out = nocs_maps[i].cpu()/nocs_max
+            nocs_map_out = (nocs_map_out + 1)/ 2 * 255
+            nocs_map_out = nocs_map_out.numpy().astype('uint8')
+
+            nocs_map_out = Image.fromarray(nocs_map_out)
+            nocs_filename = f"nocs_{i}.png"
+            full_nocs_path = os.path.join(save_dir, nocs_filename)
+            nocs_map_out.save(full_nocs_path)
