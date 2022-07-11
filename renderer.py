@@ -397,7 +397,7 @@ resolution_vis = 512 # image resolution to save
 nrows,ncols = 2, 2
 width_pad, height_pad = 2 * (ncols + 1), 2 * (nrows + 1) 
 n_feames = 32
-num_objs = 1
+num_objs = 5
 
 # sampling poses
 look_at = np.asarray([0, 0.1, 0.0])
@@ -446,7 +446,7 @@ with torch.no_grad():
             nocs_map_out = (nocs_map_out + 1)/ 2 * 255
             nocs_map_out = nocs_map_out.numpy().astype('uint8')
 
-            nocs_map_out = Image.fromarray(nocs_map_out)
-            nocs_filename = f"nocs_{i}.png"
-            full_nocs_path = os.path.join(save_dir, nocs_filename)
-            nocs_map_out.save(full_nocs_path)
+            world_depth_map_out = Image.fromarray(nocs_map_out[:, :, 2])
+            world_depth_filename = f"world_depth_{i}.png"
+            full_world_depth_path = os.path.join(save_dir, world_depth_filename)
+            world_depth_map_out.save(full_world_depth_path)
