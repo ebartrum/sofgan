@@ -408,7 +408,7 @@ with torch.no_grad():
     for obj_id in range(num_objs):
         # sampling instance embedding (Controls shape)
         smp_ins = torch.from_numpy(seg_sampler.gmm.sample(1)[0]).float()
-        smp_poses = seg_sampler.sample_pose(
+        smp_poses, nocs_maps = seg_sampler.sample_pose(
             cam_center, look_at, 
             num_samples=n_feames, emb=smp_ins)
 
