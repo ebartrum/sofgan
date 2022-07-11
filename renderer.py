@@ -393,46 +393,49 @@ seg_sampler = FaceSegSampler(
     sample_radius=radius
     )
 
-save_path = './example/fvv.mp4'
 resolution_vis = 512 # image resolution to save 
 nrows,ncols = 2, 2
 width_pad, height_pad = 2 * (ncols + 1), 2 * (nrows + 1) 
 n_feames = 10
-
-# sampling instance embedding (Controls shape)
-smp_ins = torch.from_numpy(seg_sampler.gmm.sample(1)[0]).float()
+num_objs = 3
 
 # sampling poses
 look_at = np.asarray([0, 0.1, 0.0])
 cam_center =  np.asarray([0, 0.1, 4.5])
-smp_poses = seg_sampler.sample_pose(
-    cam_center, look_at, 
-    num_samples=n_feames, emb=smp_ins)
 
-print('Samping azimuth poses: ', smp_poses.shape)
 # generate images
 with torch.no_grad():
-    seg_label = id_remap(torch.from_numpy(smp_poses[:1]).float()).to(device)
-    noise = [getattr(generator.noises, f'noise_{i}') for i in range(generator.num_layers)]
-    w_latent = sample_styles_with_miou(
-            seg_label, 1, mixstyle=0.0, truncation=args.truncation, batch_size=args.batch_size,descending=True)[0]
+    for obj_id in range(num_objs):
+        # sampling instance embedding (Controls shape)
+        smp_ins = torch.from_numpy(seg_sampler.gmm.sample(1)[0]).float()
+        smp_poses = seg_sampler.sample_pose(
+            cam_center, look_at, 
+            num_samples=n_feames, emb=smp_ins)
 
-    try:
-        tqdm._instances.clear() 
-    except Exception:     
-        pass
-    for i, seg_label in enumerate(tqdm(smp_poses)):
-        
-        seg_label = id_remap(torch.from_numpy(seg_label).float()[None,None]).to(device)
-        fake_img, _, _, _ = generator(  w_latent, return_latents=False,
-                                        condition_img=seg_label, \
-                                        input_is_latent=True, noise=noise)
-        fake_img_out = F.interpolate(fake_img.detach().cpu().clamp(-1.0, 1.0),
-                (resolution_vis,resolution_vis)).squeeze(0)
+        save_dir = f'./eval/azimuth/obj_{obj_id}'
+        os.makedirs(save_dir, exist_ok=True)
+        seg_label = id_remap(torch.from_numpy(smp_poses[:1]).float()).to(device)
+        noise = [getattr(generator.noises, f'noise_{i}') for i in range(generator.num_layers)]
+        w_latent = sample_styles_with_miou(
+                seg_label, 1, mixstyle=0.0, truncation=args.truncation, batch_size=args.batch_size,descending=True)[0]
 
-        fake_img_out = (fake_img_out + 1)/ 2 * 255
-        fake_img_out = fake_img_out.numpy().transpose((1, 2, 0)).astype('uint8')
+        try:
+            tqdm._instances.clear() 
+        except Exception:     
+            pass
+        for i, seg_label in enumerate(tqdm(smp_poses)):
+            
+            seg_label = id_remap(torch.from_numpy(seg_label).float()[None,None]).to(device)
+            fake_img, _, _, _ = generator(  w_latent, return_latents=False,
+                                            condition_img=seg_label, \
+                                            input_is_latent=True, noise=noise)
+            fake_img_out = F.interpolate(fake_img.detach().cpu().clamp(-1.0, 1.0),
+                    (resolution_vis,resolution_vis)).squeeze(0)
 
-        out = Image.fromarray(fake_img_out)
-        filename = f"{i}.png"
-        out.save(filename)
+            fake_img_out = (fake_img_out + 1)/ 2 * 255
+            fake_img_out = fake_img_out.numpy().transpose((1, 2, 0)).astype('uint8')
+
+            out = Image.fromarray(fake_img_out)
+            filename = f"{i}.png"
+            full_path = os.path.join(save_dir, filename)
+            out.save(full_path)
