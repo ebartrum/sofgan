@@ -383,13 +383,13 @@ out.release()
 img_size = 128
 num_instances = 1000
 num_poses = 100
-sample_mode = 'spiral'
+sample_mode = 'azimuth'
 radius = 4.5
 
 seg_sampler = FaceSegSampler(
     model_path='./ckpts/epoch_0250_iter_050000.pth', 
     img_size=512, 
-    sample_mode='spiral',
+    sample_mode=sample_mode,
     sample_radius=radius
     )
 
@@ -400,7 +400,7 @@ width_pad, height_pad = 2 * (ncols + 1), 2 * (nrows + 1)
 # n_feames = 120
 n_feames = 30
 
-# sampling instance embedding
+# sampling instance embedding (Controls shape)
 smp_ins = torch.from_numpy(seg_sampler.gmm.sample(1)[0]).float()
 
 # sampling poses
@@ -408,14 +408,14 @@ look_at = np.asarray([0, 0.1, 0.0])
 cam_center =  np.asarray([0, 0.1, 4.5])
 smp_poses = seg_sampler.sample_pose(
     cam_center, look_at, 
-    num_samples=n_feames, emb=smp_ins) # hacky way to only get the azimuth frames
+    num_samples=n_feames, emb=smp_ins)
 
-print('Samping spiral poses: ', smp_poses.shape)
+print('Samping azimuth poses: ', smp_poses.shape)
 
 # generate images
 fourcc = cv2.VideoWriter_fourcc('m', 'p', '4', 'v')
 out = cv2.VideoWriter(
-    f'{save_path[:-4]}_spiral.mp4', fourcc,
+    f'{save_path[:-4]}_azimuth.mp4', fourcc,
     20, (resolution_vis * ncols + width_pad, resolution_vis * nrows + height_pad))
 
 with torch.no_grad():
