@@ -1,9 +1,3 @@
-#!/usr/bin/env python
-# coding: utf-8
-
-# In[1]:
-
-
 import cv2, random
 import torch, os, argparse
 import numpy as np
@@ -12,28 +6,24 @@ from scipy.stats import norm
 from torch.nn import functional as F
 from torchvision import transforms, utils
 from tqdm import tqdm
+import torch
+import numpy as np
 
+from modules.sof.utils.seg_sampler import FaceSegSampler
 from modules.model_seg_input import Generator
 from modules.BiSeNet import BiSeNet
+
 from utils import *
 from modules.model_seg_input import scatter as scatter_model
-
 import sys,os
+
 root = os.path.abspath('.')
 os.chdir(root)
 sys.path.append(root)
 
 device = 'cuda'
-
-# get_ipython().run_line_magic('load_ext', 'autoreload')
-# get_ipython().run_line_magic('autoreload', '2')
-
 torch.cuda.set_device(0)
 os.environ['CUDA_VISIBLE_DEVICES'] = '0'
-
-
-# In[2]:
-
 
 IDList = [np.arange(17).tolist(),[0],[1,4,5,9,12],[15],[6,7,8,3],[11,13,14,16,10]]
 # IDList = [[0],[1,4,5,9,12],[15],[2,3,6,7,8,10,11,13,14,16]]
@@ -72,7 +62,6 @@ def mixing_noise(batch, latent_dim, prob, device, unbine=True):
     style_repeat = 2 // style_dim  # if prob>0 else 1
     styles = make_noise(batch, style_dim, style_repeat, latent_dim, n_noise, device)
     return styles.unbind(0) if unbine else styles
-
 
 def sample_styles_with_miou(seg_label, num_style, mixstyle=0, truncation=0.9, batch_size=4, descending=False):
     times = 0
@@ -149,7 +138,6 @@ def initFaceParsing(n_classes=20):
     ])
     return net, to_tensor
 
-
 def parsing_img(bisNet, image, to_tensor, argmax=True):
     with torch.no_grad():
         img = to_tensor(image)
@@ -159,7 +147,6 @@ def parsing_img(bisNet, image, to_tensor, argmax=True):
             segmap = segmap.argmax(1, keepdim=True)
         segmap = id_remap(segmap)
     return img, segmap
-
 
 def auto_crop_img(image, detector=None, inv_pad=2):
     if detector is None:
@@ -177,10 +164,6 @@ def auto_crop_img(image, detector=None, inv_pad=2):
         top = max(top - int(pad * 1.5), 0)
         faces.append(image[top:top + width_crop + 2 * pad, left - pad:right + pad])
     return faces
-
-
-# In[3]:
-
 
 parser = argparse.ArgumentParser()
 parser.add_argument('-i', '--input', type=str)
@@ -203,10 +186,6 @@ cmd = f'-i ./dataset/video -o ./result/mv-obama/ \
 --ckpt ./ckpts/generator.pt \
 --resolution 1024  --MODE 2 --miou_filter --truncation 0.7'
 args = parser.parse_args(cmd.split())
-
-
-# In[4]:
-
 
 # define networks
 args.latent = 512
@@ -232,12 +211,6 @@ transform = transforms.Compose(
     ]
 )
 
-
-# # image style transfer
-
-# In[5]:
-
-
 img_path = './example/Harry.jpg'# path to the source image folder
 save_path = './example/test.png'
 auto_crop = False # you need to center crop the image if you are using your own photos; please set false if image comes from FFHQ or CelebA
@@ -245,7 +218,6 @@ miou_filter = True # set true if you want to filter style with the miou
 n_styles = 3
 resolution_vis = 1024 # image resolution to save 
 save_as_video = True
-
 
 with torch.no_grad():
 
@@ -313,7 +285,6 @@ with torch.no_grad():
                     w_latent_last = w_latent_next.clone()
                     w_latent_next = w_latents[[frame]].clone()
 
-
                 frame_sub_count = 40 if i_style<4 else 30
                 cdf_scale = 1.0 / (1.0 - norm.cdf(-frame_sub_count // 2, 0, 6) * 2)
                 for frame_sub in range(-frame_sub_count // 2, frame_sub_count // 2 + 1):
@@ -339,11 +310,8 @@ with torch.no_grad():
                     result = (result.detach().numpy()[::-1]).transpose((1, 2, 0))
                     out.write(result.astype('uint8'))
         out.release()
-        
-
 
 # # video style transfer
-
 video_path = './example/faceCap.avi'# path to the source image folder
 save_path = './example/faceCap-restyle.mp4'
 auto_crop = False # you need to center crop the image if you are using your own photos; please set false if image is from FFHQ or CelebA
@@ -403,18 +371,7 @@ with torch.no_grad():
         out.write(result)
         result = []
         success, img = cap.read()
-        
 out.release()
-
-
-# # free-viewpoint protrait
-
-# In[13]:
-
-
-import torch
-import numpy as np
-from modules.sof.utils.seg_sampler import FaceSegSampler
 
 img_size = 128
 num_instances = 1000
@@ -428,11 +385,6 @@ seg_sampler = FaceSegSampler(
     sample_mode='spiral',
     sample_radius=radius
     )
-
-
-
-# In[19]:
-
 
 save_path = './example/fvv.mp4'
 resolution_vis = 512 # image resolution to save 
@@ -450,10 +402,6 @@ smp_poses = seg_sampler.sample_pose(
     cam_center, look_at, 
     num_samples=n_feames*2, emb=smp_ins)
 smp_poses = smp_poses[:n_feames]
-
-
-# In[20]:
-
 
 print('Samping spiral poses: ', smp_poses.shape)
 
