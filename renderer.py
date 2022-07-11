@@ -396,8 +396,8 @@ seg_sampler = FaceSegSampler(
 resolution_vis = 512 # image resolution to save 
 nrows,ncols = 2, 2
 width_pad, height_pad = 2 * (ncols + 1), 2 * (nrows + 1) 
-n_feames = 10
-num_objs = 3
+n_feames = 32
+num_objs = 1
 
 # sampling poses
 look_at = np.asarray([0, 0.1, 0.0])
