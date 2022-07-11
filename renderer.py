@@ -397,8 +397,7 @@ save_path = './example/fvv.mp4'
 resolution_vis = 512 # image resolution to save 
 nrows,ncols = 2, 2
 width_pad, height_pad = 2 * (ncols + 1), 2 * (nrows + 1) 
-# n_feames = 120
-n_feames = 30
+n_feames = 10
 
 # sampling instance embedding (Controls shape)
 smp_ins = torch.from_numpy(seg_sampler.gmm.sample(1)[0]).float()
@@ -411,41 +410,29 @@ smp_poses = seg_sampler.sample_pose(
     num_samples=n_feames, emb=smp_ins)
 
 print('Samping azimuth poses: ', smp_poses.shape)
-
 # generate images
-fourcc = cv2.VideoWriter_fourcc('m', 'p', '4', 'v')
-out = cv2.VideoWriter(
-    f'{save_path[:-4]}_azimuth.mp4', fourcc,
-    20, (resolution_vis * ncols + width_pad, resolution_vis * nrows + height_pad))
-
 with torch.no_grad():
-    n_styles = nrows*ncols
     seg_label = id_remap(torch.from_numpy(smp_poses[:1]).float()).to(device)
     noise = [getattr(generator.noises, f'noise_{i}') for i in range(generator.num_layers)]
-    w_latents = sample_styles_with_miou(
-            seg_label, n_styles, mixstyle=0.0, truncation=args.truncation, batch_size=args.batch_size,descending=True)
+    w_latent = sample_styles_with_miou(
+            seg_label, 1, mixstyle=0.0, truncation=args.truncation, batch_size=args.batch_size,descending=True)[0]
 
     try:
         tqdm._instances.clear() 
     except Exception:     
         pass
-    for seg_label in tqdm(smp_poses):
+    for i, seg_label in enumerate(tqdm(smp_poses)):
         
         seg_label = id_remap(torch.from_numpy(seg_label).float()[None,None]).to(device)
-        
-        seg_label_rgb = vis_condition_img(seg_label)
-        seg_label_rgb = F.interpolate(seg_label_rgb, (resolution_vis, resolution_vis), mode='bilinear', align_corners=True)
-        result = [seg_label_rgb]
-        for j in range(nrows*ncols-1):
-            fake_img, _, _, _ = generator(  w_latents[j], return_latents=False,
-                                            condition_img=seg_label, \
-                                            input_is_latent=True, noise=noise)
-        
-            result.append(F.interpolate(fake_img.detach().cpu().clamp(-1.0, 1.0),(resolution_vis,resolution_vis)))
+        fake_img, _, _, _ = generator(  w_latent, return_latents=False,
+                                        condition_img=seg_label, \
+                                        input_is_latent=True, noise=noise)
+        fake_img_out = F.interpolate(fake_img.detach().cpu().clamp(-1.0, 1.0),
+                (resolution_vis,resolution_vis)).squeeze(0)
 
-        result = torch.cat(result, dim=0)
-        result = (utils.make_grid(result, nrow=nrows) + 1) / 2 * 255
-        result = result.numpy()[::-1].transpose((1, 2, 0)).astype('uint8')
-        out.write(result)
+        fake_img_out = (fake_img_out + 1)/ 2 * 255
+        fake_img_out = fake_img_out.numpy().transpose((1, 2, 0)).astype('uint8')
 
-out.release()
+        out = Image.fromarray(fake_img_out)
+        filename = f"{i}.png"
+        out.save(filename)
