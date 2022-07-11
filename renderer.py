@@ -211,6 +211,7 @@ transform = transforms.Compose(
     ]
 )
 
+"""
 img_path = './example/Harry.jpg'# path to the source image folder
 save_path = './example/test.png'
 auto_crop = False # you need to center crop the image if you are using your own photos; please set false if image comes from FFHQ or CelebA
@@ -263,6 +264,7 @@ with torch.no_grad():
         nrows,ncols = 1, 2
         width_pad, height_pad = 2 * (ncols + 1), 2 * (nrows + 1) 
         fourcc = cv2.VideoWriter_fourcc('m', 'p', '4', 'v')
+        print(f'{save_path[:-4]}.mp4')
         out = cv2.VideoWriter(f'{save_path[:-4]}.mp4', fourcc,
                               20, (resolution_vis * ncols + width_pad, resolution_vis * nrows + height_pad))
 
@@ -310,7 +312,11 @@ with torch.no_grad():
                     result = (result.detach().numpy()[::-1]).transpose((1, 2, 0))
                     out.write(result.astype('uint8'))
         out.release()
+"""
 
+
+
+"""
 # # video style transfer
 video_path = './example/faceCap.avi'# path to the source image folder
 save_path = './example/faceCap-restyle.mp4'
@@ -372,6 +378,7 @@ with torch.no_grad():
         result = []
         success, img = cap.read()
 out.release()
+"""
 
 img_size = 128
 num_instances = 1000
@@ -390,7 +397,8 @@ save_path = './example/fvv.mp4'
 resolution_vis = 512 # image resolution to save 
 nrows,ncols = 2, 2
 width_pad, height_pad = 2 * (ncols + 1), 2 * (nrows + 1) 
-n_feames = 120
+# n_feames = 120
+n_feames = 30
 
 # sampling instance embedding
 smp_ins = torch.from_numpy(seg_sampler.gmm.sample(1)[0]).float()
@@ -400,8 +408,7 @@ look_at = np.asarray([0, 0.1, 0.0])
 cam_center =  np.asarray([0, 0.1, 4.5])
 smp_poses = seg_sampler.sample_pose(
     cam_center, look_at, 
-    num_samples=n_feames*2, emb=smp_ins)
-smp_poses = smp_poses[:n_feames]
+    num_samples=n_feames, emb=smp_ins) # hacky way to only get the azimuth frames
 
 print('Samping spiral poses: ', smp_poses.shape)
 
