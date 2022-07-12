@@ -137,5 +137,5 @@ wandb/
 *.pkl
 example
 renderer.ipynb
-eval
+eval*
 *outputs
