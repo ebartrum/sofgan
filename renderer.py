@@ -25,9 +25,8 @@ device = 'cuda'
 torch.cuda.set_device(0)
 os.environ['CUDA_VISIBLE_DEVICES'] = '0'
 
-IDList = [np.arange(17).tolist(),[0],[1,4,5,9,12],[15],[6,7,8,3],[11,13,14,16,10]]
-# IDList = [[0],[1,4,5,9,12],[15],[2,3,6,7,8,10,11,13,14,16]]
-groupName = ['Global','Background','Complexion','Hair','Eyes & Mouth','Wearings']
+IDList = [np.arange(17).tolist(),[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16],[1,4,5,9,12],[15],[6,7,8,3],[11,13,14,16,10]]
+groupName = ['Global','Foreground','Complexion','Hair','Eyes & Mouth','Wearings']
 def scatter_to_mask(segementation, out_num=1,add_whole=True,add_flip=False,region=None):
     segementation = scatter_model(segementation)
     masks = []
@@ -271,47 +270,43 @@ with torch.no_grad():
         style_masks = scatter_to_mask(seg_label, len(groupName), add_flip=False, add_whole=False)
         
         w_latent_nexts = []
-        for i_style in tqdm(range(len(groupName))):
-            if i_style != 1:
-                continue
 
-            regions = list(range(n_styles)) + [0]
+        regions = list(range(n_styles)) + [0]
 
-            for j,frame in enumerate(range(1,len(regions))):
-                print(frame)
+        for j,frame in enumerate(range(1,len(regions))):
+            if 0 == regions[frame - 1]: # first style
+                w_latent_last, w_latent_next = w_latents[:1], w_latents[[frame]]
+            elif 0 == regions[frame]:# last style
+                w_latent_last, w_latent_next = w_latent_next.clone(), w_latents[:1]
+            else:
+                w_latent_last = w_latent_next.clone()
+                w_latent_next = w_latents[[frame]].clone()
 
-                if 0 == regions[frame - 1]: # first style
-                    w_latent_last, w_latent_next = w_latents[:1], w_latents[[frame]]
-                elif 0 == regions[frame]:# last style
-                    w_latent_last, w_latent_next = w_latent_next.clone(), w_latents[:1]
-                else:
-                    w_latent_last = w_latent_next.clone()
-                    w_latent_next = w_latents[[frame]].clone()
+            frame_sub_count = 40
+            cdf_scale = 1.0 / (1.0 - norm.cdf(-frame_sub_count // 2, 0, 6) * 2)
+            for frame_sub in range(-frame_sub_count // 2, frame_sub_count // 2 + 1):
 
-                frame_sub_count = 40 if i_style<4 else 30
-                cdf_scale = 1.0 / (1.0 - norm.cdf(-frame_sub_count // 2, 0, 6) * 2)
-                for frame_sub in range(-frame_sub_count // 2, frame_sub_count // 2 + 1):
+                weight = (norm.cdf(frame_sub, 0, 6) - norm.cdf(-frame_sub_count // 2, 0, 6)) * cdf_scale
 
-                    weight = (norm.cdf(frame_sub, 0, 6) - norm.cdf(-frame_sub_count // 2, 0, 6)) * cdf_scale
-
-                    w_latent_current = (1.0 - weight) * w_latent_last + weight * w_latent_next
-                    w_latent_current = torch.cat((w_latents[:1],w_latent_current),dim=0)
+                w_latent_current = (1.0 - weight) * w_latent_last + weight * w_latent_next
+                w_latent_current = torch.cat((w_latents[:1],w_latent_current),dim=0)
 
 
-                    # first row
-                    result = [img]
-                    w_latent_current_in = w_latent_current.view(-1, 18, 512)
-                    fake_img, _, _, _ = generator(w_latent_current_in, return_latents=False,
-                                                  condition_img=seg_label, \
-                                                  input_is_latent=True, noise=noise,
-                                                  style_mask=style_masks[[i_style]])
-                    result.append(F.interpolate(fake_img.detach().cpu().clamp(-1.0, 1.0),(resolution_vis,resolution_vis)
-                                               , mode='bilinear', align_corners=True))
+                # first row
+                result = [img]
+                w_latent_current_in = w_latent_current.view(-1, 18, 512)
+                fake_img, _, _, _ = generator(w_latent_current_in, return_latents=False,
+                                              condition_img=seg_label, \
+                                              input_is_latent=True, noise=noise,
+                                              style_mask=style_masks[[1]] # This is where FG is changed
+                                              )
+                result.append(F.interpolate(fake_img.detach().cpu().clamp(-1.0, 1.0),(resolution_vis,resolution_vis)
+                                           , mode='bilinear', align_corners=True))
 
-                    result = torch.cat(result, dim=0)
-                    result = (utils.make_grid(result, nrow=ncols) + 1) / 2 * 255
-                    result = (result.detach().numpy()[::-1]).transpose((1, 2, 0))
-                    out.write(result.astype('uint8'))
+                result = torch.cat(result, dim=0)
+                result = (utils.make_grid(result, nrow=ncols) + 1) / 2 * 255
+                result = (result.detach().numpy()[::-1]).transpose((1, 2, 0))
+                out.write(result.astype('uint8'))
         out.release()
 
 
