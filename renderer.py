@@ -380,68 +380,122 @@ with torch.no_grad():
 out.release()
 """
 
+inference_mode = "fg"
+# inference_mode = "azimuth"
+
 img_size = 128
-sample_mode = 'azimuth'
 radius = 4.5
-
-num_poses = 3
-seg_sampler = FaceSegSampler(
-    model_path='./ckpts/epoch_0250_iter_050000.pth', 
-    img_size=512, 
-    sample_mode=sample_mode,
-    sample_radius=radius,
-    max_batch_size=num_poses
-    )
-
 resolution_vis = 512 # image resolution to save 
-nrows,ncols = 2, 2
-width_pad, height_pad = 2 * (ncols + 1), 2 * (nrows + 1) 
-n_feames = num_poses
-num_objs = 1000
 
-# sampling poses
-look_at = np.asarray([0, 0.1, 0.0])
-cam_center =  np.asarray([0, 0.1, 4.5])
+if inference_mode == "azimuth":
+    num_poses = 3
+    seg_sampler = FaceSegSampler(
+        model_path='./ckpts/epoch_0250_iter_050000.pth', 
+        img_size=512, 
+        sample_mode="azimuth",
+        sample_radius=radius,
+        max_batch_size=num_poses
+        )
 
-# generate images
-with torch.no_grad():
-    for obj_id in range(num_objs):
-        # sampling instance embedding (Controls shape)
-        smp_ins = torch.from_numpy(seg_sampler.gmm.sample(1)[0]).float()
-        smp_poses, nocs_maps = seg_sampler.sample_pose(
-            cam_center, look_at, 
-            num_samples=n_feames, emb=smp_ins)
+    nrows,ncols = 2, 2
+    width_pad, height_pad = 2 * (ncols + 1), 2 * (nrows + 1) 
+    n_feames = num_poses
+    num_objs = 1000
 
-        save_dir = f'./eval/azimuth/obj_{obj_id}'
-        os.makedirs(save_dir, exist_ok=True)
-        seg_label = id_remap(torch.from_numpy(smp_poses[:1]).float()).to(device)
-        noise = [getattr(generator.noises, f'noise_{i}') for i in range(generator.num_layers)]
-        w_latent = sample_styles_with_miou(
-                seg_label, 1, mixstyle=0.0, truncation=args.truncation, batch_size=args.batch_size,descending=True)[0]
+    # sampling poses
+    look_at = np.asarray([0, 0.1, 0.0])
+    cam_center =  np.asarray([0, 0.1, 4.5])
 
-        try:
-            tqdm._instances.clear() 
-        except Exception:     
-            pass
-        for i, seg_label in enumerate(tqdm(smp_poses)):
-            
-            seg_label = id_remap(torch.from_numpy(seg_label).float()[None,None]).to(device)
-            fake_img, _, _, _ = generator(  w_latent, return_latents=False,
-                                            condition_img=seg_label, \
-                                            input_is_latent=True, noise=noise)
-            fake_img_out = F.interpolate(fake_img.detach().cpu().clamp(-1.0, 1.0),
-                    (resolution_vis,resolution_vis)).squeeze(0)
+    # generate images
+    with torch.no_grad():
+        for obj_id in range(num_objs):
+            # sampling instance embedding (Controls shape)
+            smp_ins = torch.from_numpy(seg_sampler.gmm.sample(1)[0]).float()
+            smp_poses, nocs_maps = seg_sampler.sample_pose(
+                cam_center, look_at, 
+                num_samples=n_feames, emb=smp_ins)
 
-            fake_img_out = (fake_img_out + 1)/ 2 * 255
-            fake_img_out = fake_img_out.numpy().transpose((1, 2, 0)).astype('uint8')
+            save_dir = f'./eval/azimuth/obj_{obj_id}'
+            os.makedirs(save_dir, exist_ok=True)
+            seg_label = id_remap(torch.from_numpy(smp_poses[:1]).float()).to(device)
+            noise = [getattr(generator.noises, f'noise_{i}') for i in range(generator.num_layers)]
+            w_latent = sample_styles_with_miou(
+                    seg_label, 1, mixstyle=0.0, truncation=args.truncation, batch_size=args.batch_size,descending=True)[0]
 
-            out = Image.fromarray(fake_img_out)
-            filename = f"{i}.png"
-            full_path = os.path.join(save_dir, filename)
-            out.save(full_path)
+            try:
+                tqdm._instances.clear() 
+            except Exception:     
+                pass
+            for i, seg_label in enumerate(tqdm(smp_poses)):
+                seg_label = id_remap(torch.from_numpy(seg_label).float()[None,None]).to(device)
+                fake_img, _, _, _ = generator(  w_latent, return_latents=False,
+                                                condition_img=seg_label, \
+                                                input_is_latent=True, noise=noise)
+                fake_img_out = F.interpolate(fake_img.detach().cpu().clamp(-1.0, 1.0),
+                        (resolution_vis,resolution_vis)).squeeze(0)
 
-            nocs_map_out = nocs_maps[i].cpu()
-            world_depth_out = nocs_map_out[:, :, 2]
-            world_depth_filename = f"world_depth_{i}.pt"
-            full_world_depth_path = os.path.join(save_dir, world_depth_filename)
-            torch.save(world_depth_out, full_world_depth_path)
+                fake_img_out = (fake_img_out + 1)/ 2 * 255
+                fake_img_out = fake_img_out.numpy().transpose((1, 2, 0)).astype('uint8')
+
+                out = Image.fromarray(fake_img_out)
+                filename = f"{i}.png"
+                full_path = os.path.join(save_dir, filename)
+                out.save(full_path)
+
+                nocs_map_out = nocs_maps[i].cpu()
+                world_depth_out = nocs_map_out[:, :, 2]
+                world_depth_filename = f"world_depth_{i}.pt"
+                full_world_depth_path = os.path.join(save_dir, world_depth_filename)
+                torch.save(world_depth_out, full_world_depth_path)
+
+if inference_mode == "fg":
+    num_poses = 2
+    frontal_seg_sampler = FaceSegSampler(
+        model_path='./ckpts/epoch_0250_iter_050000.pth', 
+        img_size=512, 
+        sample_mode="frontal",
+        sample_radius=radius,
+        max_batch_size=num_poses
+        )
+
+    n_feames = num_poses
+    num_objs = 5
+
+    # sampling poses
+    look_at = np.asarray([0, 0.1, 0.0])
+    cam_center =  np.asarray([0, 0.1, 4.5])
+
+    # generate images
+    with torch.no_grad():
+        for obj_id in range(num_objs):
+            # sampling instance embedding (Controls shape)
+            smp_ins = torch.from_numpy(frontal_seg_sampler.gmm.sample(1)[0]).float()
+            smp_poses, nocs_maps = frontal_seg_sampler.sample_pose(
+                cam_center, look_at, 
+                num_samples=n_feames, emb=smp_ins)
+            save_dir = f'./eval/fg/obj_{obj_id}'
+            os.makedirs(save_dir, exist_ok=True)
+            seg_label = id_remap(torch.from_numpy(smp_poses[:1]).float()).to(device)
+            noise = [getattr(generator.noises, f'noise_{i}') for i in range(generator.num_layers)]
+            w_latent = sample_styles_with_miou(
+                    seg_label, 1, mixstyle=0.0, truncation=args.truncation, batch_size=args.batch_size,descending=True)[0]
+
+            try:
+                tqdm._instances.clear() 
+            except Exception:     
+                pass
+            for i, seg_label in enumerate(tqdm(smp_poses)):
+                seg_label = id_remap(torch.from_numpy(seg_label).float()[None,None]).to(device)
+                fake_img, _, _, _ = generator(  w_latent, return_latents=False,
+                                                condition_img=seg_label, \
+                                                input_is_latent=True, noise=noise)
+                fake_img_out = F.interpolate(fake_img.detach().cpu().clamp(-1.0, 1.0),
+                        (resolution_vis,resolution_vis)).squeeze(0)
+
+                fake_img_out = (fake_img_out + 1)/ 2 * 255
+                fake_img_out = fake_img_out.numpy().transpose((1, 2, 0)).astype('uint8')
+
+                out = Image.fromarray(fake_img_out)
+                filename = f"{i}.png"
+                full_path = os.path.join(save_dir, filename)
+                out.save(full_path)
