@@ -168,24 +168,23 @@ def auto_crop_img(image, detector=None, inv_pad=2):
 parser = argparse.ArgumentParser()
 parser.add_argument('-i', '--input', type=str)
 parser.add_argument('-o', '--output', type=str)
-parser.add_argument('-batch_size', type=int,default=4)
+parser.add_argument('--inference_mode', type=str, default="azimuth")
+parser.add_argument('-batch_size', type=int, default=4)
 parser.add_argument('--resolution', type=int, default=1024)
 parser.add_argument('--nrows', type=int, default=6)
-parser.add_argument('--ckpt', type=str, default=None)
+parser.add_argument('--ckpt', type=str, default="./ckpts/generator.pt")
 parser.add_argument('--channel_multiplier', type=int, default=2)
 parser.add_argument('--with_rgb_input', action='store_true')
 parser.add_argument('--with_local_style', action='store_true')
 parser.add_argument('--condition_dim', type=int, default=0)
 parser.add_argument('--styles_path', type=str, default=None)
-parser.add_argument('--MODE', type=int, default=0)
+parser.add_argument('--MODE', type=int, default=2)
 parser.add_argument('--miou_filter', action='store_true')
 parser.add_argument('--truncation', type=float, default=0.7)
 parser.add_argument('--with_seg_fc', action='store_true')
 
-cmd = f'-i ./dataset/video -o ./result/mv-obama/ \
---ckpt ./ckpts/generator.pt \
---resolution 1024  --MODE 2 --miou_filter --truncation 0.7'
-args = parser.parse_args(cmd.split())
+args = parser.parse_args()
+args.miou_filter = True
 
 # define networks
 args.latent = 512
@@ -380,9 +379,8 @@ with torch.no_grad():
 out.release()
 """
 
-# inference_mode = "appearance"
-# inference_mode = "azimuth"
-inference_mode = "shape"
+inference_mode = args.inference_mode
+assert inference_mode in ["azimuth", "appearance", "shape"]
 
 img_size = 128
 radius = 4.5
