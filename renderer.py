@@ -399,7 +399,7 @@ if inference_mode == "azimuth":
     nrows,ncols = 2, 2
     width_pad, height_pad = 2 * (ncols + 1), 2 * (nrows + 1) 
     n_feames = num_poses
-    num_objs = 1000
+    num_objs = 10000
 
     # sampling poses
     look_at = np.asarray([0, 0.1, 0.0])
@@ -448,8 +448,8 @@ if inference_mode == "azimuth":
                 torch.save(world_depth_out, full_world_depth_path)
 
 if inference_mode == "appearance":
-    num_objs = 5
-    num_appearances = 5
+    num_objs = 10
+    num_appearances = 100
     frontal_seg_sampler = FaceSegSampler(
         model_path='./ckpts/epoch_0250_iter_050000.pth', 
         img_size=512, 
@@ -507,8 +507,8 @@ if inference_mode == "appearance":
                 out.save(full_path)
 
 if inference_mode == "shape":
-    num_objs = 5
-    num_shapes = 5
+    num_objs = 10
+    num_shapes = 100
     frontal_seg_sampler = FaceSegSampler(
         model_path='./ckpts/epoch_0250_iter_050000.pth', 
         img_size=512, 
