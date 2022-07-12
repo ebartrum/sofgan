@@ -381,29 +381,27 @@ out.release()
 """
 
 img_size = 128
-num_instances = 1000
-num_poses = 100
 sample_mode = 'azimuth'
 radius = 4.5
 
+num_poses = 3
 seg_sampler = FaceSegSampler(
     model_path='./ckpts/epoch_0250_iter_050000.pth', 
     img_size=512, 
     sample_mode=sample_mode,
-    sample_radius=radius
+    sample_radius=radius,
+    max_batch_size=num_poses
     )
 
 resolution_vis = 512 # image resolution to save 
 nrows,ncols = 2, 2
 width_pad, height_pad = 2 * (ncols + 1), 2 * (nrows + 1) 
-n_feames = 32
-num_objs = 5
+n_feames = num_poses
+num_objs = 1000
 
 # sampling poses
 look_at = np.asarray([0, 0.1, 0.0])
 cam_center =  np.asarray([0, 0.1, 4.5])
-
-nocs_max = 2.5
 
 # generate images
 with torch.no_grad():
@@ -442,11 +440,8 @@ with torch.no_grad():
             full_path = os.path.join(save_dir, filename)
             out.save(full_path)
 
-            nocs_map_out = nocs_maps[i].cpu()/nocs_max
-            nocs_map_out = (nocs_map_out + 1)/ 2 * 255
-            nocs_map_out = nocs_map_out.numpy().astype('uint8')
-
-            world_depth_map_out = Image.fromarray(nocs_map_out[:, :, 2])
-            world_depth_filename = f"world_depth_{i}.png"
+            nocs_map_out = nocs_maps[i].cpu()
+            world_depth_out = nocs_map_out[:, :, 2]
+            world_depth_filename = f"world_depth_{i}.pt"
             full_world_depth_path = os.path.join(save_dir, world_depth_filename)
-            world_depth_map_out.save(full_world_depth_path)
+            torch.save(world_depth_out, full_world_depth_path)
