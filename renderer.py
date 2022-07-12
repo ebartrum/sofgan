@@ -210,7 +210,6 @@ transform = transforms.Compose(
     ]
 )
 
-"""
 img_path = './example/Harry.jpg'# path to the source image folder
 save_path = './example/test.png'
 auto_crop = False # you need to center crop the image if you are using your own photos; please set false if image comes from FFHQ or CelebA
@@ -273,10 +272,13 @@ with torch.no_grad():
         
         w_latent_nexts = []
         for i_style in tqdm(range(len(groupName))):
+            if i_style != 1:
+                continue
 
             regions = list(range(n_styles)) + [0]
 
             for j,frame in enumerate(range(1,len(regions))):
+                print(frame)
 
                 if 0 == regions[frame - 1]: # first style
                     w_latent_last, w_latent_next = w_latents[:1], w_latents[[frame]]
@@ -311,10 +313,10 @@ with torch.no_grad():
                     result = (result.detach().numpy()[::-1]).transpose((1, 2, 0))
                     out.write(result.astype('uint8'))
         out.release()
-"""
 
 
 
+exit()
 """
 # # video style transfer
 video_path = './example/faceCap.avi'# path to the source image folder
@@ -380,7 +382,7 @@ out.release()
 """
 
 inference_mode = args.inference_mode
-assert inference_mode in ["azimuth", "appearance", "shape"]
+assert inference_mode in ["azimuth", "appearance", "shape", "generate"]
 
 img_size = 128
 radius = 4.5
@@ -448,8 +450,8 @@ if inference_mode == "azimuth":
                 torch.save(world_depth_out, full_world_depth_path)
 
 if inference_mode == "appearance":
-    num_objs = 10
-    num_appearances = 100
+    num_objs = 2
+    num_appearances = 10
     frontal_seg_sampler = FaceSegSampler(
         model_path='./ckpts/epoch_0250_iter_050000.pth', 
         img_size=512, 
@@ -570,3 +572,55 @@ if inference_mode == "shape":
                 filename = f"{i}.png"
                 full_path = os.path.join(save_dir, filename)
                 out.save(full_path)
+
+if inference_mode == "generate":
+    num_samples = 16
+    random_seg_sampler = FaceSegSampler(
+        model_path='./ckpts/epoch_0250_iter_050000.pth', 
+        img_size=256, 
+        sample_mode="sphere",
+        max_batch_size=2
+        )
+
+    # sampling poses
+    look_at = np.asarray([0, 0.1, 0.0])
+    cam_center =  np.asarray([0, 0.1, 4.5])
+
+    # generate images
+    with torch.no_grad():
+        for obj_id in range(num_samples):
+            save_dir = f'./eval/{inference_mode}/'
+            os.makedirs(save_dir, exist_ok=True)
+
+            # sampling instance embedding (Controls shape)
+            smp_ins = torch.from_numpy(random_seg_sampler.gmm.sample(1)[0]).float()
+            smp_poses, _ = random_seg_sampler.sample_pose(
+                cam_center, look_at, 
+                num_samples=2, emb=smp_ins)
+            smp_poses = smp_poses[[0]] # Only use 1 pose
+
+            seg_label = id_remap(torch.from_numpy(smp_poses[:1]).float()).to(device)
+            noise = [getattr(generator.noises, f'noise_{i}') for i in range(generator.num_layers)]
+            w_latent = sample_styles_with_miou(
+                    seg_label, 1, mixstyle=0.0, truncation=args.truncation, batch_size=args.batch_size,descending=True)[0]
+
+            try:
+                tqdm._instances.clear() 
+            except Exception:     
+                pass
+            seg_label = smp_poses[0]
+            seg_label = id_remap(torch.from_numpy(seg_label).float()[None,None]).to(device)
+
+            fake_img, _, _, _ = generator(  w_latent, return_latents=False,
+                                            condition_img=seg_label, \
+                                            input_is_latent=True, noise=noise)
+            fake_img_out = F.interpolate(fake_img.detach().cpu().clamp(-1.0, 1.0),
+                    (resolution_vis,resolution_vis)).squeeze(0)
+
+            fake_img_out = (fake_img_out + 1)/ 2 * 255
+            fake_img_out = fake_img_out.numpy().transpose((1, 2, 0)).astype('uint8')
+
+            out = Image.fromarray(fake_img_out)
+            filename = f"obj_{obj_id}.png"
+            full_path = os.path.join(save_dir, filename)
+            out.save(full_path)
