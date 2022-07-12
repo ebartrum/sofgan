@@ -510,7 +510,7 @@ if inference_mode == "appearance":
 
 if inference_mode == "shape":
     num_objs = 5
-    num_appearances = 5
+    num_shapes = 5
     frontal_seg_sampler = FaceSegSampler(
         model_path='./ckpts/epoch_0250_iter_050000.pth', 
         img_size=512, 
@@ -519,7 +519,7 @@ if inference_mode == "shape":
         max_batch_size=2
         )
 
-    n_feames = num_appearances
+    n_feames = num_shapes
 
     # sampling poses
     look_at = np.asarray([0, 0.1, 0.0])
@@ -528,6 +528,9 @@ if inference_mode == "shape":
     # generate images
     with torch.no_grad():
         for obj_id in range(num_objs):
+            save_dir = f'./eval/{inference_mode}/obj_{obj_id}'
+            os.makedirs(save_dir, exist_ok=True)
+
             # sampling instance embedding (Controls shape)
             smp_ins = torch.from_numpy(frontal_seg_sampler.gmm.sample(1)[0]).float()
             smp_poses, _ = frontal_seg_sampler.sample_pose(
@@ -535,8 +538,6 @@ if inference_mode == "shape":
                 num_samples=n_feames, emb=smp_ins)
             smp_poses = smp_poses[[0]] # Only need 1 frontal pose
 
-            save_dir = f'./eval/{inference_mode}/obj_{obj_id}'
-            os.makedirs(save_dir, exist_ok=True)
             seg_label = id_remap(torch.from_numpy(smp_poses[:1]).float()).to(device)
             noise = [getattr(generator.noises, f'noise_{i}') for i in range(generator.num_layers)]
             w_latent = sample_styles_with_miou(
@@ -548,10 +549,15 @@ if inference_mode == "shape":
                 pass
             seg_label = smp_poses[0]
             seg_label = id_remap(torch.from_numpy(seg_label).float()[None,None]).to(device)
-            for i in range(num_appearances):
-                new_w_latent = sample_styles_with_miou(
-                        seg_label, 1, mixstyle=0.0, truncation=args.truncation, batch_size=args.batch_size,descending=True)[0]
-                w_latent = new_w_latent
+            for i in range(num_shapes):
+                smp_ins = torch.from_numpy(frontal_seg_sampler.gmm.sample(1)[0]).float()
+                smp_poses, _ = frontal_seg_sampler.sample_pose(
+                    cam_center, look_at, 
+                    num_samples=n_feames, emb=smp_ins)
+                smp_poses = smp_poses[[0]] # Only need 1 frontal pose
+
+                seg_label = smp_poses[0]
+                seg_label = id_remap(torch.from_numpy(seg_label).float()[None,None]).to(device)
 
                 fake_img, _, _, _ = generator(  w_latent, return_latents=False,
                                                 condition_img=seg_label, \
