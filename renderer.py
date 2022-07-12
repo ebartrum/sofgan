@@ -449,7 +449,7 @@ if inference_mode == "azimuth":
 
 if inference_mode == "appearance":
     num_objs = 10
-    num_appearances = 100
+    num_appearances = 120
     frontal_seg_sampler = FaceSegSampler(
         model_path='./ckpts/epoch_0250_iter_050000.pth', 
         img_size=512, 
