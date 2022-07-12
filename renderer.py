@@ -380,8 +380,9 @@ with torch.no_grad():
 out.release()
 """
 
-inference_mode = "appearance"
+# inference_mode = "appearance"
 # inference_mode = "azimuth"
+inference_mode = "shape"
 
 img_size = 128
 radius = 4.5
@@ -449,6 +450,65 @@ if inference_mode == "azimuth":
                 torch.save(world_depth_out, full_world_depth_path)
 
 if inference_mode == "appearance":
+    num_objs = 5
+    num_appearances = 5
+    frontal_seg_sampler = FaceSegSampler(
+        model_path='./ckpts/epoch_0250_iter_050000.pth', 
+        img_size=512, 
+        sample_mode="frontal",
+        sample_radius=radius,
+        max_batch_size=2
+        )
+
+    n_feames = num_appearances
+
+    # sampling poses
+    look_at = np.asarray([0, 0.1, 0.0])
+    cam_center =  np.asarray([0, 0.1, 4.5])
+
+    # generate images
+    with torch.no_grad():
+        for obj_id in range(num_objs):
+            # sampling instance embedding (Controls shape)
+            smp_ins = torch.from_numpy(frontal_seg_sampler.gmm.sample(1)[0]).float()
+            smp_poses, _ = frontal_seg_sampler.sample_pose(
+                cam_center, look_at, 
+                num_samples=n_feames, emb=smp_ins)
+            smp_poses = smp_poses[[0]] # Only need 1 frontal pose
+
+            save_dir = f'./eval/{inference_mode}/obj_{obj_id}'
+            os.makedirs(save_dir, exist_ok=True)
+            seg_label = id_remap(torch.from_numpy(smp_poses[:1]).float()).to(device)
+            noise = [getattr(generator.noises, f'noise_{i}') for i in range(generator.num_layers)]
+            w_latent = sample_styles_with_miou(
+                    seg_label, 1, mixstyle=0.0, truncation=args.truncation, batch_size=args.batch_size,descending=True)[0]
+
+            try:
+                tqdm._instances.clear() 
+            except Exception:     
+                pass
+            seg_label = smp_poses[0]
+            seg_label = id_remap(torch.from_numpy(seg_label).float()[None,None]).to(device)
+            for i in range(num_appearances):
+                new_w_latent = sample_styles_with_miou(
+                        seg_label, 1, mixstyle=0.0, truncation=args.truncation, batch_size=args.batch_size,descending=True)[0]
+                w_latent = new_w_latent
+
+                fake_img, _, _, _ = generator(  w_latent, return_latents=False,
+                                                condition_img=seg_label, \
+                                                input_is_latent=True, noise=noise)
+                fake_img_out = F.interpolate(fake_img.detach().cpu().clamp(-1.0, 1.0),
+                        (resolution_vis,resolution_vis)).squeeze(0)
+
+                fake_img_out = (fake_img_out + 1)/ 2 * 255
+                fake_img_out = fake_img_out.numpy().transpose((1, 2, 0)).astype('uint8')
+
+                out = Image.fromarray(fake_img_out)
+                filename = f"{i}.png"
+                full_path = os.path.join(save_dir, filename)
+                out.save(full_path)
+
+if inference_mode == "shape":
     num_objs = 5
     num_appearances = 5
     frontal_seg_sampler = FaceSegSampler(
