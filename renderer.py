@@ -592,11 +592,11 @@ if inference_mode == "shape":
                 out.save(full_path)
 
 if inference_mode == "generate":
-    num_samples = 16
+    num_samples = 64
     random_seg_sampler = FaceSegSampler(
         model_path='./ckpts/epoch_0250_iter_050000.pth', 
         img_size=256, 
-        sample_mode="sphere",
+        sample_mode="frontal",
         max_batch_size=2
         )
 
@@ -606,7 +606,7 @@ if inference_mode == "generate":
 
     # generate images
     with torch.no_grad():
-        for obj_id in range(num_samples):
+        for obj_id in tqdm(range(num_samples)):
             save_dir = f'./eval/{inference_mode}/'
             os.makedirs(save_dir, exist_ok=True)
 
