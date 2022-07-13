@@ -596,7 +596,7 @@ if inference_mode == "generate":
     random_seg_sampler = FaceSegSampler(
         model_path='./ckpts/epoch_0250_iter_050000.pth', 
         img_size=256, 
-        sample_mode="frontal",
+        sample_mode="random",
         max_batch_size=2
         )
 
