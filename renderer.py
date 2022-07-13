@@ -592,7 +592,7 @@ if inference_mode == "shape":
                 out.save(full_path)
 
 if inference_mode == "generate":
-    num_samples = 64
+    num_samples = 50000
     random_seg_sampler = FaceSegSampler(
         model_path='./ckpts/epoch_0250_iter_050000.pth', 
         img_size=256, 
