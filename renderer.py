@@ -383,6 +383,7 @@ assert inference_mode in ["azimuth", "fg", "shape", "generate"]
 img_size = 128
 radius = 4.5
 resolution_vis = 512 # image resolution to save 
+MAX_RESOLUTION = (256, 256)
 
 if inference_mode == "azimuth":
     num_poses = 3
@@ -435,7 +436,7 @@ if inference_mode == "azimuth":
                 fake_img_out = (fake_img_out + 1)/ 2 * 255
                 fake_img_out = fake_img_out.numpy().transpose((1, 2, 0)).astype('uint8')
 
-                out = Image.fromarray(fake_img_out)
+                out = Image.fromarray(fake_img_out).resize(MAX_RESOLUTION)
                 filename = f"{i}.png"
                 full_path = os.path.join(save_dir, filename)
                 out.save(full_path)
@@ -444,20 +445,22 @@ if inference_mode == "azimuth":
                 world_depth_out = nocs_map_out[:, :, 2]
                 world_depth_filename = f"depth_{i}.pt"
                 full_world_depth_path = os.path.join(save_dir, world_depth_filename)
-                torch.save(world_depth_out, full_world_depth_path)
+                resized_world_depth_out = F.interpolate(world_depth_out.unsqueeze(0), MAX_RESOLUTION[0]).squeeze(0)
+                torch.save(resized_world_depth_out, full_world_depth_path)
 
                 depth_img = ((world_depth_out/2.5).unsqueeze(0).cpu()*255).numpy().transpose((1, 2, 0)).astype('uint8')
-                depth_img_out = Image.fromarray(depth_img.squeeze(-1))
+                depth_img_out = Image.fromarray(depth_img.squeeze(-1)).resize(MAX_RESOLUTION)
                 depth_img_filename = f"depth_{i}.png"
                 full_depth_img_path = os.path.join(save_dir, depth_img_filename)
                 depth_img_out.save(full_depth_img_path)
 
                 alpha_filename = f"alpha_{i}.pt"
                 full_alpha_path = os.path.join(save_dir, alpha_filename)
-                torch.save(alpha_map, full_alpha_path)
+                resized_alpha_map = F.interpolate(alpha_map.unsqueeze(0), MAX_RESOLUTION[0]).squeeze(0)
+                torch.save(resized_alpha_map, full_alpha_path)
 
                 alpha_img = (alpha_map.cpu()*255).numpy().transpose((1, 2, 0)).astype('uint8')
-                alpha_img_out = Image.fromarray(alpha_img.squeeze(-1))
+                alpha_img_out = Image.fromarray(alpha_img.squeeze(-1)).resize(MAX_RESOLUTION)
                 alpha_img_filename = f"alpha_{i}.png"
                 full_alpha_img_path = os.path.join(save_dir, alpha_img_filename)
                 alpha_img_out.save(full_alpha_img_path)
@@ -518,7 +521,7 @@ if inference_mode == "fg":
                 fake_img_out = (fake_img_out + 1)/ 2 * 255
                 fake_img_out = fake_img_out.numpy().transpose((1, 2, 0)).astype('uint8')
 
-                out = Image.fromarray(fake_img_out)
+                out = Image.fromarray(fake_img_out).resize(MAX_RESOLUTION)
                 filename = f"{i}.png"
                 full_path = os.path.join(save_dir, filename)
                 out.save(full_path)
@@ -583,7 +586,7 @@ if inference_mode == "shape":
                 fake_img_out = (fake_img_out + 1)/ 2 * 255
                 fake_img_out = fake_img_out.numpy().transpose((1, 2, 0)).astype('uint8')
 
-                out = Image.fromarray(fake_img_out)
+                out = Image.fromarray(fake_img_out).resize(MAX_RESOLUTION)
                 filename = f"{i}.png"
                 full_path = os.path.join(save_dir, filename)
                 out.save(full_path)
@@ -635,7 +638,7 @@ if inference_mode == "generate":
             fake_img_out = (fake_img_out + 1)/ 2 * 255
             fake_img_out = fake_img_out.numpy().transpose((1, 2, 0)).astype('uint8')
 
-            out = Image.fromarray(fake_img_out)
+            out = Image.fromarray(fake_img_out).resize(MAX_RESOLUTION)
             filename = f"obj_{obj_id}.png"
             full_path = os.path.join(save_dir, filename)
             out.save(full_path)
