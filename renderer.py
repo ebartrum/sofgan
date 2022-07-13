@@ -309,11 +309,10 @@ with torch.no_grad():
                 result = (result.detach().numpy()[::-1]).transpose((1, 2, 0))
                 out.write(result.astype('uint8'))
         out.release()
-
-
-
-exit()
 """
+
+
+
 """
 # # video style transfer
 video_path = './example/faceCap.avi'# path to the source image folder
@@ -503,13 +502,15 @@ if inference_mode == "fg":
                 pass
             seg_label = smp_poses[0]
             seg_label = id_remap(torch.from_numpy(seg_label).float()[None,None]).to(device)
+            style_masks = scatter_to_mask(seg_label, len(groupName), add_flip=False, add_whole=False)
             for i in range(num_appearances):
                 new_w_latent = sample_styles_with_miou(
                         seg_label, 1, mixstyle=0.0, truncation=args.truncation, batch_size=args.batch_size,descending=True)[0]
-                w_latent = new_w_latent
+                w_latent = torch.cat((w_latent[:1],new_w_latent[1:]),dim=0)
 
-                fake_img, _, _, _ = generator(  w_latent, return_latents=False,
+                fake_img, _, _, _ = generator(w_latent, return_latents=False,
                                                 condition_img=seg_label, \
+                                                style_mask=style_masks[[1]], # This is where FG is changed
                                                 input_is_latent=True, noise=noise)
                 fake_img_out = F.interpolate(fake_img.detach().cpu().clamp(-1.0, 1.0),
                         (resolution_vis,resolution_vis)).squeeze(0)
