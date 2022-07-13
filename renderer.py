@@ -466,8 +466,8 @@ if inference_mode == "azimuth":
                 alpha_img_out.save(full_alpha_img_path)
 
 if inference_mode == "fg":
-    num_objs = 2
-    num_appearances = 10
+    num_objs = 10
+    num_appearances = 100
     frontal_seg_sampler = FaceSegSampler(
         model_path='./ckpts/epoch_0250_iter_050000.pth', 
         img_size=512, 
