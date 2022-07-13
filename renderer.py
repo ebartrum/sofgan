@@ -25,9 +25,8 @@ device = 'cuda'
 torch.cuda.set_device(0)
 os.environ['CUDA_VISIBLE_DEVICES'] = '0'
 
-IDList = [np.arange(17).tolist(),[0],[1,4,5,9,12],[15],[6,7,8,3],[11,13,14,16,10]]
-# IDList = [[0],[1,4,5,9,12],[15],[2,3,6,7,8,10,11,13,14,16]]
-groupName = ['Global','Background','Complexion','Hair','Eyes & Mouth','Wearings']
+IDList = [np.arange(17).tolist(),[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16],[1,4,5,9,12],[15],[6,7,8,3],[11,13,14,16,10]]
+groupName = ['Global','Foreground','Complexion','Hair','Eyes & Mouth','Wearings']
 def scatter_to_mask(segementation, out_num=1,add_whole=True,add_flip=False,region=None):
     segementation = scatter_model(segementation)
     masks = []
@@ -272,44 +271,43 @@ with torch.no_grad():
         style_masks = scatter_to_mask(seg_label, len(groupName), add_flip=False, add_whole=False)
         
         w_latent_nexts = []
-        for i_style in tqdm(range(len(groupName))):
 
-            regions = list(range(n_styles)) + [0]
+        regions = list(range(n_styles)) + [0]
 
-            for j,frame in enumerate(range(1,len(regions))):
+        for j,frame in enumerate(range(1,len(regions))):
+            if 0 == regions[frame - 1]: # first style
+                w_latent_last, w_latent_next = w_latents[:1], w_latents[[frame]]
+            elif 0 == regions[frame]:# last style
+                w_latent_last, w_latent_next = w_latent_next.clone(), w_latents[:1]
+            else:
+                w_latent_last = w_latent_next.clone()
+                w_latent_next = w_latents[[frame]].clone()
 
-                if 0 == regions[frame - 1]: # first style
-                    w_latent_last, w_latent_next = w_latents[:1], w_latents[[frame]]
-                elif 0 == regions[frame]:# last style
-                    w_latent_last, w_latent_next = w_latent_next.clone(), w_latents[:1]
-                else:
-                    w_latent_last = w_latent_next.clone()
-                    w_latent_next = w_latents[[frame]].clone()
+            frame_sub_count = 40
+            cdf_scale = 1.0 / (1.0 - norm.cdf(-frame_sub_count // 2, 0, 6) * 2)
+            for frame_sub in range(-frame_sub_count // 2, frame_sub_count // 2 + 1):
 
-                frame_sub_count = 40 if i_style<4 else 30
-                cdf_scale = 1.0 / (1.0 - norm.cdf(-frame_sub_count // 2, 0, 6) * 2)
-                for frame_sub in range(-frame_sub_count // 2, frame_sub_count // 2 + 1):
+                weight = (norm.cdf(frame_sub, 0, 6) - norm.cdf(-frame_sub_count // 2, 0, 6)) * cdf_scale
 
-                    weight = (norm.cdf(frame_sub, 0, 6) - norm.cdf(-frame_sub_count // 2, 0, 6)) * cdf_scale
-
-                    w_latent_current = (1.0 - weight) * w_latent_last + weight * w_latent_next
-                    w_latent_current = torch.cat((w_latents[:1],w_latent_current),dim=0)
+                w_latent_current = (1.0 - weight) * w_latent_last + weight * w_latent_next
+                w_latent_current = torch.cat((w_latents[:1],w_latent_current),dim=0)
 
 
-                    # first row
-                    result = [img]
-                    w_latent_current_in = w_latent_current.view(-1, 18, 512)
-                    fake_img, _, _, _ = generator(w_latent_current_in, return_latents=False,
-                                                  condition_img=seg_label, \
-                                                  input_is_latent=True, noise=noise,
-                                                  style_mask=style_masks[[i_style]])
-                    result.append(F.interpolate(fake_img.detach().cpu().clamp(-1.0, 1.0),(resolution_vis,resolution_vis)
-                                               , mode='bilinear', align_corners=True))
+                # first row
+                result = [img]
+                w_latent_current_in = w_latent_current.view(-1, 18, 512)
+                fake_img, _, _, _ = generator(w_latent_current_in, return_latents=False,
+                                              condition_img=seg_label, \
+                                              input_is_latent=True, noise=noise,
+                                              style_mask=style_masks[[1]] # This is where FG is changed
+                                              )
+                result.append(F.interpolate(fake_img.detach().cpu().clamp(-1.0, 1.0),(resolution_vis,resolution_vis)
+                                           , mode='bilinear', align_corners=True))
 
-                    result = torch.cat(result, dim=0)
-                    result = (utils.make_grid(result, nrow=ncols) + 1) / 2 * 255
-                    result = (result.detach().numpy()[::-1]).transpose((1, 2, 0))
-                    out.write(result.astype('uint8'))
+                result = torch.cat(result, dim=0)
+                result = (utils.make_grid(result, nrow=ncols) + 1) / 2 * 255
+                result = (result.detach().numpy()[::-1]).transpose((1, 2, 0))
+                out.write(result.astype('uint8'))
         out.release()
 """
 
@@ -380,11 +378,12 @@ out.release()
 """
 
 inference_mode = args.inference_mode
-assert inference_mode in ["azimuth", "appearance", "shape"]
+assert inference_mode in ["azimuth", "fg", "shape", "generate"]
 
 img_size = 128
 radius = 4.5
 resolution_vis = 512 # image resolution to save 
+MAX_RESOLUTION = (256, 256)
 
 if inference_mode == "azimuth":
     num_poses = 3
@@ -427,6 +426,7 @@ if inference_mode == "azimuth":
                 pass
             for i, seg_label in enumerate(tqdm(smp_poses)):
                 seg_label = id_remap(torch.from_numpy(seg_label).float()[None,None]).to(device)
+                alpha_map = (seg_label>0).float().squeeze(0)
                 fake_img, _, _, _ = generator(  w_latent, return_latents=False,
                                                 condition_img=seg_label, \
                                                 input_is_latent=True, noise=noise)
@@ -436,20 +436,38 @@ if inference_mode == "azimuth":
                 fake_img_out = (fake_img_out + 1)/ 2 * 255
                 fake_img_out = fake_img_out.numpy().transpose((1, 2, 0)).astype('uint8')
 
-                out = Image.fromarray(fake_img_out)
+                out = Image.fromarray(fake_img_out).resize(MAX_RESOLUTION)
                 filename = f"{i}.png"
                 full_path = os.path.join(save_dir, filename)
                 out.save(full_path)
 
                 nocs_map_out = nocs_maps[i].cpu()
                 world_depth_out = nocs_map_out[:, :, 2]
-                world_depth_filename = f"world_depth_{i}.pt"
+                world_depth_filename = f"depth_{i}.pt"
                 full_world_depth_path = os.path.join(save_dir, world_depth_filename)
-                torch.save(world_depth_out, full_world_depth_path)
+                resized_world_depth_out = F.interpolate(world_depth_out.unsqueeze(0), MAX_RESOLUTION[0]).squeeze(0)
+                torch.save(resized_world_depth_out, full_world_depth_path)
 
-if inference_mode == "appearance":
-    num_objs = 10
-    num_appearances = 120
+                depth_img = ((world_depth_out/2.5).unsqueeze(0).cpu()*255).numpy().transpose((1, 2, 0)).astype('uint8')
+                depth_img_out = Image.fromarray(depth_img.squeeze(-1)).resize(MAX_RESOLUTION)
+                depth_img_filename = f"depth_{i}.png"
+                full_depth_img_path = os.path.join(save_dir, depth_img_filename)
+                depth_img_out.save(full_depth_img_path)
+
+                alpha_filename = f"alpha_{i}.pt"
+                full_alpha_path = os.path.join(save_dir, alpha_filename)
+                resized_alpha_map = F.interpolate(alpha_map.unsqueeze(0), MAX_RESOLUTION[0]).squeeze(0)
+                torch.save(resized_alpha_map, full_alpha_path)
+
+                alpha_img = (alpha_map.cpu()*255).numpy().transpose((1, 2, 0)).astype('uint8')
+                alpha_img_out = Image.fromarray(alpha_img.squeeze(-1)).resize(MAX_RESOLUTION)
+                alpha_img_filename = f"alpha_{i}.png"
+                full_alpha_img_path = os.path.join(save_dir, alpha_img_filename)
+                alpha_img_out.save(full_alpha_img_path)
+
+if inference_mode == "fg":
+    num_objs = 2
+    num_appearances = 10
     frontal_seg_sampler = FaceSegSampler(
         model_path='./ckpts/epoch_0250_iter_050000.pth', 
         img_size=512, 
@@ -487,13 +505,15 @@ if inference_mode == "appearance":
                 pass
             seg_label = smp_poses[0]
             seg_label = id_remap(torch.from_numpy(seg_label).float()[None,None]).to(device)
+            style_masks = scatter_to_mask(seg_label, len(groupName), add_flip=False, add_whole=False)
             for i in range(num_appearances):
                 new_w_latent = sample_styles_with_miou(
                         seg_label, 1, mixstyle=0.0, truncation=args.truncation, batch_size=args.batch_size,descending=True)[0]
-                w_latent = new_w_latent
+                w_latent = torch.cat((w_latent[:1],new_w_latent[1:]),dim=0)
 
-                fake_img, _, _, _ = generator(  w_latent, return_latents=False,
+                fake_img, _, _, _ = generator(w_latent, return_latents=False,
                                                 condition_img=seg_label, \
+                                                style_mask=style_masks[[1]], # This is where FG is changed
                                                 input_is_latent=True, noise=noise)
                 fake_img_out = F.interpolate(fake_img.detach().cpu().clamp(-1.0, 1.0),
                         (resolution_vis,resolution_vis)).squeeze(0)
@@ -501,7 +521,7 @@ if inference_mode == "appearance":
                 fake_img_out = (fake_img_out + 1)/ 2 * 255
                 fake_img_out = fake_img_out.numpy().transpose((1, 2, 0)).astype('uint8')
 
-                out = Image.fromarray(fake_img_out)
+                out = Image.fromarray(fake_img_out).resize(MAX_RESOLUTION)
                 filename = f"{i}.png"
                 full_path = os.path.join(save_dir, filename)
                 out.save(full_path)
@@ -566,7 +586,59 @@ if inference_mode == "shape":
                 fake_img_out = (fake_img_out + 1)/ 2 * 255
                 fake_img_out = fake_img_out.numpy().transpose((1, 2, 0)).astype('uint8')
 
-                out = Image.fromarray(fake_img_out)
+                out = Image.fromarray(fake_img_out).resize(MAX_RESOLUTION)
                 filename = f"{i}.png"
                 full_path = os.path.join(save_dir, filename)
                 out.save(full_path)
+
+if inference_mode == "generate":
+    num_samples = 16
+    random_seg_sampler = FaceSegSampler(
+        model_path='./ckpts/epoch_0250_iter_050000.pth', 
+        img_size=256, 
+        sample_mode="sphere",
+        max_batch_size=2
+        )
+
+    # sampling poses
+    look_at = np.asarray([0, 0.1, 0.0])
+    cam_center =  np.asarray([0, 0.1, 4.5])
+
+    # generate images
+    with torch.no_grad():
+        for obj_id in range(num_samples):
+            save_dir = f'./eval/{inference_mode}/'
+            os.makedirs(save_dir, exist_ok=True)
+
+            # sampling instance embedding (Controls shape)
+            smp_ins = torch.from_numpy(random_seg_sampler.gmm.sample(1)[0]).float()
+            smp_poses, _ = random_seg_sampler.sample_pose(
+                cam_center, look_at, 
+                num_samples=2, emb=smp_ins)
+            smp_poses = smp_poses[[0]] # Only use 1 pose
+
+            seg_label = id_remap(torch.from_numpy(smp_poses[:1]).float()).to(device)
+            noise = [getattr(generator.noises, f'noise_{i}') for i in range(generator.num_layers)]
+            w_latent = sample_styles_with_miou(
+                    seg_label, 1, mixstyle=0.0, truncation=args.truncation, batch_size=args.batch_size,descending=True)[0]
+
+            try:
+                tqdm._instances.clear() 
+            except Exception:     
+                pass
+            seg_label = smp_poses[0]
+            seg_label = id_remap(torch.from_numpy(seg_label).float()[None,None]).to(device)
+
+            fake_img, _, _, _ = generator(  w_latent, return_latents=False,
+                                            condition_img=seg_label, \
+                                            input_is_latent=True, noise=noise)
+            fake_img_out = F.interpolate(fake_img.detach().cpu().clamp(-1.0, 1.0),
+                    (resolution_vis,resolution_vis)).squeeze(0)
+
+            fake_img_out = (fake_img_out + 1)/ 2 * 255
+            fake_img_out = fake_img_out.numpy().transpose((1, 2, 0)).astype('uint8')
+
+            out = Image.fromarray(fake_img_out).resize(MAX_RESOLUTION)
+            filename = f"obj_{obj_id}.png"
+            full_path = os.path.join(save_dir, filename)
+            out.save(full_path)
