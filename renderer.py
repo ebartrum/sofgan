@@ -379,7 +379,7 @@ out.release()
 """
 
 inference_mode = args.inference_mode
-assert inference_mode in ["azimuth", "appearance", "shape", "generate"]
+assert inference_mode in ["azimuth", "fg", "shape", "generate"]
 
 img_size = 128
 radius = 4.5
@@ -463,7 +463,7 @@ if inference_mode == "azimuth":
                 full_alpha_img_path = os.path.join(save_dir, alpha_img_filename)
                 alpha_img_out.save(full_alpha_img_path)
 
-if inference_mode == "appearance":
+if inference_mode == "fg":
     num_objs = 2
     num_appearances = 10
     frontal_seg_sampler = FaceSegSampler(
