@@ -209,6 +209,7 @@ transform = transforms.Compose(
     ]
 )
 
+"""
 img_path = './example/Harry.jpg'# path to the source image folder
 save_path = './example/test.png'
 auto_crop = False # you need to center crop the image if you are using your own photos; please set false if image comes from FFHQ or CelebA
@@ -312,6 +313,7 @@ with torch.no_grad():
 
 
 exit()
+"""
 """
 # # video style transfer
 video_path = './example/faceCap.avi'# path to the source image folder
@@ -424,6 +426,7 @@ if inference_mode == "azimuth":
                 pass
             for i, seg_label in enumerate(tqdm(smp_poses)):
                 seg_label = id_remap(torch.from_numpy(seg_label).float()[None,None]).to(device)
+                alpha_map = (seg_label>0).float().squeeze(0)
                 fake_img, _, _, _ = generator(  w_latent, return_latents=False,
                                                 condition_img=seg_label, \
                                                 input_is_latent=True, noise=noise)
@@ -440,9 +443,25 @@ if inference_mode == "azimuth":
 
                 nocs_map_out = nocs_maps[i].cpu()
                 world_depth_out = nocs_map_out[:, :, 2]
-                world_depth_filename = f"world_depth_{i}.pt"
+                world_depth_filename = f"depth_{i}.pt"
                 full_world_depth_path = os.path.join(save_dir, world_depth_filename)
                 torch.save(world_depth_out, full_world_depth_path)
+
+                depth_img = ((world_depth_out/2.5).unsqueeze(0).cpu()*255).numpy().transpose((1, 2, 0)).astype('uint8')
+                depth_img_out = Image.fromarray(depth_img.squeeze(-1))
+                depth_img_filename = f"depth_{i}.png"
+                full_depth_img_path = os.path.join(save_dir, depth_img_filename)
+                depth_img_out.save(full_depth_img_path)
+
+                alpha_filename = f"alpha_{i}.pt"
+                full_alpha_path = os.path.join(save_dir, alpha_filename)
+                torch.save(alpha_map, full_alpha_path)
+
+                alpha_img = (alpha_map.cpu()*255).numpy().transpose((1, 2, 0)).astype('uint8')
+                alpha_img_out = Image.fromarray(alpha_img.squeeze(-1))
+                alpha_img_filename = f"alpha_{i}.png"
+                full_alpha_img_path = os.path.join(save_dir, alpha_img_filename)
+                alpha_img_out.save(full_alpha_img_path)
 
 if inference_mode == "appearance":
     num_objs = 2
